@@ -119,14 +119,13 @@ fn system(
 ```rust
 fn system(
     mut query: Query<&mut BigFive>,
-    events: EventReader<CastSpellEvent>,
+    trigger: Trigger<CastSpellEvent>,
 ) {
-    for event in events.read() {
-        if let Ok([mut source, mut target]) =
-            query.get_many_mut([event.source, event.target])
-        {
-            // Can mutate both at once
-        }
+    let event = trigger.event();
+    if let Ok([mut source, mut target]) =
+        query.get_many_mut([event.source, event.target])
+    {
+        // Can mutate both at once
     }
 }
 ```
@@ -223,37 +222,42 @@ pub fn check_thresholds(
 }
 ```
 
-### Event-Driven Pattern
+### Event-Driven Pattern (Bevy 0.17/0.18 Observer Pattern)
 
 **Problem:** Systems need to communicate without tight coupling.
 
 **Solution:**
 ```rust
 // Define event
-#[derive(Event)]
+#[derive(Event, Clone)]  // Clone required for observers
 pub struct SpellCastEvent {
     pub caster: Entity,
     pub target: Entity,
     pub spell_type: SpellType,
 }
 
-// Writer system
+// Register observer
+app.add_observer(handle_spell_cast);
+
+// Trigger
 pub fn cast_spell(
     input: Res<ButtonInput<KeyCode>>,
-    mut events: EventWriter<SpellCastEvent>,
+    mut commands: Commands,
 ) {
     if input.just_pressed(KeyCode::Space) {
-        events.send(SpellCastEvent { /* ... */ });
+        commands.trigger(SpellCastEvent { /* ... */ });
     }
 }
 
-// Reader system
-pub fn process_spells(
-    mut events: EventReader<SpellCastEvent>,
+// Observer handler
+pub fn handle_spell_cast(
+    trigger: Trigger<SpellCastEvent>,
     mut query: Query<&mut BigFive>,
 ) {
-    for event in events.read() {
-        // Process spell
+    let event = trigger.event();
+    // Process spell
+    if let Ok(mut stats) = query.get_mut(event.target) {
+        // Apply spell effects
     }
 }
 ```
@@ -274,4 +278,58 @@ pub fn initialize_derived_physics(
         ));
     }
 }
+```
+
+## Bevy 0.18 Specific Patterns
+
+### ArchetypeQueryData for Exact Size
+
+In Bevy 0.18, queries with `Changed<T>` filter are not archetypal. Use `ArchetypeQueryData` if you need `ExactSizeIterator`:
+
+```rust
+// ❌ Bevy 0.17
+fn requires_exact_size<D: QueryData>(q: Query<D>) -> usize {
+    q.into_iter().len()
+}
+
+// ✅ Bevy 0.18
+fn requires_exact_size<D: ArchetypeQueryData>(q: Query<D>) -> usize {
+    q.into_iter().len()
+}
+```
+
+### Automatic Aabb Updates
+
+In Bevy 0.18, sprites and meshes automatically update their AABB. Use `NoAutoAabb` to disable:
+
+```rust
+// Automatic (default in 0.18)
+commands.spawn((
+    Mesh3d(mesh_handle),
+    MeshMaterial3d(material_handle),
+    Transform::from_xyz(0.0, 0.0, 0.0),
+));
+
+// Disable auto Aabb if you manage it manually
+commands.spawn((
+    Mesh3d(mesh_handle),
+    MeshMaterial3d(material_handle),
+    Transform::from_xyz(0.0, 0.0, 0.0),
+    NoAutoAabb,
+));
+```
+
+### Entity Relationship Detach Methods
+
+In Bevy 0.18, use `detach_*` methods instead of `clear_*`/`remove_*`:
+
+```rust
+// Detach all children
+commands.entity(parent).detach_all_children();
+
+// Detach specific child
+commands.entity(parent).detach_child(child);
+
+// Detach all related entities
+commands.entity(entity).detach_all_related::<Children>();
 ```

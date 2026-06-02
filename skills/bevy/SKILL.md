@@ -20,14 +20,23 @@ Invoke this skill when:
 
 ## Before You Start: Essential Bevy Tips
 
-### ⚠️ Bevy 0.17 Breaking Changes
+### ⚠️ Bevy 0.18 Breaking Changes
 
-**If working with Bevy 0.17**, be aware of significant API changes:
-- Material handles now wrapped in `MeshMaterial3d<T>` (not `Handle<T>`)
-- Event system replaced with observer pattern (`commands.trigger()`, `add_observer()`)
-- Color arithmetic operations removed (use component extraction)
+**If working with Bevy 0.18**, be aware of significant API changes:
+- `RenderTarget` is now a separate component (not a `Camera` field)
+- `BorderRadius` merged into `Node` (no longer a separate component)
+- `LineHeight` is now a separate component (was part of `TextFont`)
+- `clear_children`/`clear_related` renamed to `detach_*` methods
+- `Gizmos::cuboid` renamed to `Gizmos::cube`
+- `AmbientLight` split into component + `GlobalAmbientLight` resource
+- `enable_prepass`/`enable_shadows` are now `Material` methods
+- Cargo feature collections (`2d`, `3d`, `ui`) and input source features
+- `Animation` feature renamed to `gltf_animation`
+- `#[reflect(...)]` only supports parentheses (not brackets/braces)
+- Material handles wrapped in `MeshMaterial3d<T>` (from 0.17)
+- Observer pattern for events: `commands.trigger()`, `add_observer()` (from 0.17)
 
-**See `references/bevy_specific_tips.md` for complete Bevy 0.17 migration guide and examples.**
+**See `references/bevy_specific_tips.md` for complete Bevy 0.18 migration guide and examples.**
 
 ### Consult Bevy Registry Examples First
 
@@ -35,7 +44,7 @@ Invoke this skill when:
 
 **Location:**
 ```bash
-~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy-0.17.1/examples
+~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy-0.18.1/examples
 ```
 
 There are MANY examples covering all aspects of Bevy development. Review relevant examples to understand best practices and working patterns.
@@ -50,7 +59,7 @@ pub struct CombatPlugin;
 impl Plugin for CombatPlugin {
     fn build(&self, app: &mut App) {
         app
-            .add_event::<DamageEvent>()
+            .add_observer(handle_damage)
             .add_systems(Update, (process_damage, check_death));
     }
 }
@@ -375,10 +384,10 @@ For details on recommended file organization, module structure, and component fi
 
 This skill includes detailed reference documentation:
 
-- `references/bevy_specific_tips.md` - **START HERE:** Registry examples, plugin structure, build optimization, version management, domain-driven design for ECS
+- `references/bevy_specific_tips.md` - **START HERE:** Bevy 0.18 changes, registry examples, plugin structure, build optimization, version management, domain-driven design for ECS
 - `references/ecs_patterns.md` - Component design patterns, query patterns, and common ECS design patterns (Derivation, State Machine, Threshold/Trigger, Event-Driven, Initialization)
 - `references/ui_development.md` - Bevy UI hierarchy, component patterns, layout tips, positioning, styling, and text updates
-- `references/common_pitfalls.md` - Common mistakes and their solutions (system registration, borrowing conflicts, change detection, system ordering, entity queries, asset handles)
+- `references/common_pitfalls.md` - Common mistakes and their solutions (RenderTarget, BorderRadius, LineHeight, observer pattern, borrowing conflicts, change detection, system ordering, feature flags, and more)
 - `references/project_structure.md` - Recommended file organization, module structure, component file patterns, and change detection
 
 Load these references as needed to inform implementation decisions.

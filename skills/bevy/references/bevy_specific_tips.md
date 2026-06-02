@@ -1,42 +1,82 @@
 # Bevy-Specific Development Tips
 
-## Bevy 0.17 Specific Changes
+## Bevy 0.18 Specific Changes
 
-**Important:** Bevy 0.17 introduced several breaking API changes. If you encounter compilation errors related to materials, events, or colors, refer to this section.
+**Important:** Bevy 0.18 introduced several breaking API changes. If you encounter compilation errors, refer to this section.
 
-### Material Component Wrapper
+### RenderTarget as Component
 
-In Bevy 0.17, material handles are wrapped in `MeshMaterial3d<T>`:
+In Bevy 0.18, `RenderTarget` is a separate component instead of a `Camera` field:
 
 ```rust
-// ❌ Bevy 0.15/0.16 - This will fail in 0.17
-Query<&Handle<StandardMaterial>>
+// ❌ Bevy 0.17 - This will fail in 0.18
+commands.spawn((
+    Camera3d::default(),
+    Camera {
+        target: RenderTarget::Image(image_handle.into()),
+        ..default()
+    },
+));
 
-// ✅ Bevy 0.17 - Use the wrapper component
-Query<&MeshMaterial3d<StandardMaterial>>
-
-// Access the inner handle with .0
-fn update_materials(
-    query: Query<&MeshMaterial3d<StandardMaterial>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    for material_3d in query.iter() {
-        if let Some(material) = materials.get_mut(&material_3d.0) {
-            material.emissive = LinearRgba::RED;
-        }
-    }
-}
+// ✅ Bevy 0.18 - Use RenderTarget as a component
+commands.spawn((
+    Camera3d::default(),
+    RenderTarget::Image(image_handle.into()),
+));
 ```
 
 **Error symptoms:**
-- `Handle<StandardMaterial> is not a Component`
-- Query trait bounds not satisfied
+- `Camera` no longer has a `target` field
+- `RenderTarget` not found as expected
 
-**Solution:** Always use `MeshMaterial3d<T>` wrapper when querying material components.
+**Solution:** Always use `RenderTarget` as a separate component.
+
+### BorderRadius Merged into Node
+
+In Bevy 0.18, `BorderRadius` is no longer a separate component:
+
+```rust
+// ❌ Bevy 0.17
+commands.spawn((
+    Node { /* ... */ },
+    BorderRadius::all(Val::Px(8.0)),
+));
+
+// ✅ Bevy 0.18
+commands.spawn((
+    Node {
+        border_radius: BorderRadius::all(Val::Px(8.0)),
+        // ...
+    },
+));
+```
+
+### LineHeight as Separate Component
+
+In Bevy 0.18, `LineHeight` is a separate component instead of part of `TextFont`:
+
+```rust
+// ❌ Bevy 0.17
+TextFont {
+    font_size: 24.0,
+    line_height: Some(1.5),
+    ..default()
+}
+
+// ✅ Bevy 0.18
+commands.spawn((
+    Text::new("Hello"),
+    TextFont {
+        font_size: 24.0,
+        ..default()
+    },
+    LineHeight(1.5),
+));
+```
 
 ### Observer Pattern (Replaces Events)
 
-Bevy 0.17 introduces observers as a replacement for the event system:
+Bevy 0.17+ uses observers instead of the event system:
 
 ```rust
 // ❌ Old event pattern (Bevy 0.15/0.16)
@@ -56,7 +96,7 @@ fn cast_spell(mut events: EventWriter<SpellCastEvent>) {
     events.send(SpellCastEvent { spell_name: "Fireball".into() });
 }
 
-// ✅ Bevy 0.17 observer pattern
+// ✅ Bevy 0.17/0.18 observer pattern
 #[derive(Event, Clone)]  // Must derive Clone!
 struct SpellCastEvent { spell_name: String }
 
@@ -82,16 +122,53 @@ fn cast_spell(mut commands: Commands) {
 - Trigger with `commands.trigger()` instead of `EventWriter::send()`
 - Observers are not systems - they're called directly when triggered
 
-**Error symptoms:**
-- `MyEvent is not a Message`
-- `method 'send' not found for MessageWriter`
-- `method 'read' not found`
+### Material Component Wrapper
 
-**Solution:** Migrate to the observer pattern as shown above.
+In Bevy 0.17/0.18, material handles are wrapped in `MeshMaterial3d<T>`:
+
+```rust
+// ❌ Bevy 0.15/0.16 - This will fail in 0.17/0.18
+Query<&Handle<StandardMaterial>>
+
+// ✅ Bevy 0.17/0.18 - Use the wrapper component
+Query<&MeshMaterial3d<StandardMaterial>>
+
+// Access the inner handle with .0
+fn update_materials(
+    query: Query<&MeshMaterial3d<StandardMaterial>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    for material_3d in query.iter() {
+        if let Some(material) = materials.get_mut(&material_3d.0) {
+            material.emissive = LinearRgba::RED;
+        }
+    }
+}
+```
+
+### Material Plugin Changes (0.18)
+
+In Bevy 0.18, `prepass_enabled` and `shadows_enabled` are `Material` methods:
+
+```rust
+// ❌ Bevy 0.17
+MaterialPlugin::<MyMaterial> {
+    prepass_enabled: false,
+    shadows_enabled: false,
+}
+
+// ✅ Bevy 0.18
+impl Material for MyMaterial {
+    // ...
+
+    fn enable_prepass() -> bool { false }
+    fn enable_shadows() -> bool { false }
+}
+```
 
 ### Color Operations
 
-Direct color arithmetic operations aren't supported in Bevy 0.17:
+Direct color arithmetic operations aren't supported in Bevy 0.17/0.18:
 
 ```rust
 // ❌ Doesn't compile
@@ -114,11 +191,106 @@ let dimmed = LinearRgba::rgb(
 );
 ```
 
-**Error symptoms:**
-- `cannot multiply Color by {float}`
-- `no implementation for Color * f32`
+### Gizmos API Change
 
-**Solution:** Convert to component form or use `LinearRgba` for mathematical operations.
+In Bevy 0.18, `Gizmos::cuboid` was renamed to `Gizmos::cube`:
+
+```rust
+// ❌ Bevy 0.17
+gizmos.cuboid(transform, Color::RED);
+
+// ✅ Bevy 0.18
+gizmos.cube(transform, Color::RED);
+```
+
+### Relationship Methods Renamed
+
+In Bevy 0.18, `clear_*` and `remove_*` methods renamed to `detach_*`:
+
+```rust
+// ❌ Bevy 0.17
+entity.clear_children();
+entity.remove_child(child);
+entity.clear_related::<Children>();
+
+// ✅ Bevy 0.18
+entity.detach_all_children();
+entity.detach_child(child);
+entity.detach_all_related::<Children>();
+```
+
+### AmbientLight Split
+
+In Bevy 0.18, `AmbientLight` is a component, not a resource:
+
+```rust
+// ❌ Bevy 0.17
+commands.insert_resource(AmbientLight {
+    color: Color::WHITE,
+    brightness: 1.0,
+});
+
+// ✅ Bevy 0.18
+commands.spawn(AmbientLight {
+    color: Color::WHITE,
+    brightness: 1.0,
+});
+```
+
+### #[reflect(...)] Syntax
+
+In Bevy 0.18, `#[reflect(...)]` only supports parentheses:
+
+```rust
+// ❌ Bevy 0.17 - brackets or braces
+#[derive(Clone, Reflect)]
+#[reflect[Clone]]
+
+#[derive(Clone, Reflect)]
+#[reflect{Clone}]
+
+// ✅ Bevy 0.18 - parentheses only
+#[derive(Clone, Reflect)]
+#[reflect(Clone)]
+```
+
+### Feature Flags
+
+In Bevy 0.18, feature names changed and input sources require explicit features:
+
+```toml
+# ❌ Bevy 0.17
+bevy = { version = "0.17", default-features = false, features = ["animation"] }
+
+# ✅ Bevy 0.18
+bevy = { version = "0.18", default-features = false, features = [
+  "gltf_animation",     # renamed from "animation"
+  "mouse",
+  "keyboard",
+  "gamepad",
+  "touch",
+  "gestures",
+] }
+
+# Or use feature collections:
+bevy = { version = "0.18", features = ["3d", "render"] }
+```
+
+### Mesh Functions
+
+In Bevy 0.18, mesh functions have `try_*` equivalents for safety:
+
+```rust
+// ❌ Bevy 0.17 - may panic on RENDER_WORLD-only meshes
+let mesh = assets.get(handle).unwrap();
+mesh.attribute(Mesh::ATTRIBUTE_POSITION);
+mesh.insert_attribute(...);
+
+// ✅ Bevy 0.18 - use try_* methods
+let mesh = assets.get(handle).unwrap();
+mesh.try_attribute(Mesh::ATTRIBUTE_POSITION);
+mesh.try_insert_attribute(...);
+```
 
 ---
 
@@ -128,7 +300,7 @@ let dimmed = LinearRgba::rgb(
 
 **Location:**
 ```bash
-~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy-0.17.1/examples
+~/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy-0.18.1/examples
 ```
 
 **When to consult registry examples:**
@@ -176,7 +348,7 @@ pub struct CombatPlugin;
 impl Plugin for CombatPlugin {
     fn build(&self, app: &mut App) {
         app
-            .add_event::<DamageEvent>()
+            .add_observer(handle_damage)
             .add_systems(Startup, setup_combat)
             .add_systems(Update, (
                 process_damage,

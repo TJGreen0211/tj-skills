@@ -17,7 +17,7 @@ src/
 │   └── ui/
 │       ├── mod.rs
 │       └── [ui_feature].rs
-├── events.rs              # Game events and messages
+├── events.rs              # Game events (use observer pattern in 0.17/0.18)
 └── resources.rs           # Global resources
 ```
 
